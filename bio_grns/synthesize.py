@@ -193,12 +193,12 @@ class GRNSimulator:
 
                 _relevant_genes = np.any(
                     traj._latent_network != 0,
-                    axis=0
+                    axis=1
                 )
 
                 _relevant_genes = np.any(
                     self._reg_network[:, _relevant_genes] != 0,
-                    axis=0
+                    axis=1
                 )
 
                 initial_vector[~_relevant_genes] = 0.
