@@ -1,5 +1,6 @@
 import numpy as np
 import anndata as ad
+import pandas as pd
 import tqdm
 
 from .trajectories import Trajectory
@@ -7,7 +8,8 @@ from .generators import (
     network_generator,
     generate_transcription_rates,
     generate_decays,
-    generate_tf_indices
+    generate_tf_indices,
+    count_generator
 )
 from .utils import logger
 
@@ -211,8 +213,12 @@ class GRNSimulator:
 
     def generate_count_data(
         self,
+        n_counts_per_sample: int = None,
         random_seed: int = None
     ):
+
+        if n_counts_per_sample is None:
+            n_counts_per_sample = self.counts_per_sample
 
         if random_seed is None:
             rng = self._rng
@@ -232,29 +238,52 @@ class GRNSimulator:
         )
 
         _select_times = []
-        _col_ids = np.arange(self.n_genes)
 
         for i in tqdm.trange(self.n_samples):
 
+            # Randomly select a point on each trajectory
+            # Build a joint expression vector
+            # And convert it to a probability vector to select counts
             select_expression = [
                 traj.random_expression_time(rng=rng)
                 for traj in self._trajectories
             ]
 
-            _select_times.append([x[1] for x in select_expression])
-
             joint_expression = sum([x[0] for x in select_expression])
             joint_expression /= np.sum(joint_expression)
 
-            data.X[i, :] = np.bincount(
-                self._rng.choice(
-                    _col_ids,
-                    size=self.counts_per_sample,
-                    p=joint_expression
-                ),
-                minlength=self.n_genes
+            data.X[i, :] = count_generator(
+                joint_expression,
+                n_counts_per_sample,
+                rng
             )
 
+            _select_times.append([x[1] for x in select_expression])
+
+        ### PACK UP THE UNDERLYING SIMULATED DATA INTO AN ANNDATA OBJECT ###
+
         data.obs[[x.name for x in self._trajectories]] = _select_times
+
+        data.var['decay_constant'] = self._decay_constants
+        data.var['transcriptional_output'] = self._transcriptional_output
+
+        data.uns['network'] = pd.DataFrame(
+            self._reg_network,
+            index=data.var_names,
+            columns=data.var_names.values[self._tf_indices]
+        )
+
+        for traj in self._trajectories:
+
+            _pattern_names = [
+                f"{n[0]}_{i}"
+                for i, n in enumerate(traj.pattern)
+            ]
+
+            data.uns[f"{traj.name}"] = pd.DataFrame(
+                traj._latent_network,
+                index=data.var_names.values[self._tf_indices],
+                columns=_pattern_names
+            )
 
         return data

@@ -1,6 +1,8 @@
 from typing import List
 import numpy as np
 
+from ..utils import logger
+
 def network_generator(
     n: int,
     m: int,
@@ -132,5 +134,10 @@ def network_generator(
         )
 
         tll_network[m_connections, n_col] = connections[m_connections]
+
+    logger.debug(
+        f"Generated {tll_network.shape} network "
+        f"with {np.sum(tll_network != 0)} nonzero edges"
+    )
 
     return tll_network

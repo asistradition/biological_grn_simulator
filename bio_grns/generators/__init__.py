@@ -11,3 +11,7 @@ from .generate_dynamics import (
 from .generate_network import (
     network_generator
 )
+
+from .generate_counts import (
+    count_generator
+)
