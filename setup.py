@@ -13,7 +13,8 @@ requires = [
     "numpy",
     "pandas",
     "sklearn",
-    "anndata"
+    "anndata",
+    "tqdm"
 ]
 
 setup(
