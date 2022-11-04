@@ -1,18 +1,26 @@
+from typing import (
+    Tuple
+)
+
 from .generators.generate_dynamics import dynamic_value_generator
 from .values_from_network import values_from_network_latent
 from .values_from_dynamics import values_from_dynamic_network
+from .utils import logger
 
 import numpy as np
 
 class Trajectory:
 
     pattern = None
+    name = None
+
     target_ratios = None
+    latent_network_sparsity = None
 
     rng = None
 
     _activity = None
-    _expression = None
+    expression = None
 
     _dynamic_values = None
     _latent_network = None
@@ -31,27 +39,38 @@ class Trajectory:
 
         return self._dynamic_values
 
+    @property
+    def n_patterns(self):
+        return len(self.pattern)
+
     def __init__(
         self,
-        n_tfs: int,
-        rng: np.random.Generator,
+        n_time_steps: int,
+        rng: np.random.Generator = None,
         force_positive: bool = True,
-        primary_trajectory: bool = True
+        primary_trajectory: bool = True,
+        latent_network_sparsity: float = 0.1,
+        offset_expression_activity: int = 15,
+        name: str = None
     ) -> None:
 
         self.pattern = []
         self.target_ratios = []
 
-        self.n_tfs = n_tfs
+        self.n_time_steps = n_time_steps
+        self.time_offset_expression_activity = offset_expression_activity
+
         self.force_positive = force_positive
         self.primary_trajectory = primary_trajectory
         self.rng = rng
+        self.latent_network_sparsity = latent_network_sparsity
+        self.name = name
 
     def add_pattern(
         self,
-        pattern_name,
-        *args,
-        target_edge_ratio = 1.
+        pattern_name: str,
+        *args: float,
+        target_edge_ratio: float = 1.
     ) -> None:
         """
         Add an activity pattern to this trajectory.
@@ -81,10 +100,7 @@ class Trajectory:
         """
 
         self.pattern.append(
-            tuple(
-                pattern_name,
-                *args
-            )
+            (pattern_name,) + args
         )
 
         self.target_ratios.append(
@@ -103,37 +119,48 @@ class Trajectory:
                 "Unable to calculate activity without a network"
             )
 
+        logger.debug(
+            f"Generating pattern regulatory activity for {self.name}"
+        )
+
         self._activity = values_from_network_latent(
             self._latent_network,
-            self._dynamic_values
+            self.dynamics
         )
 
     def _calculate_dynamics(self) -> None:
 
+        logger.debug(
+            f"Generating pattern dynamic states for {self.name}"
+        )
+
         self._dynamic_values = dynamic_value_generator(
             len(self.pattern),
-            self.n_tfs,
+            self.n_time_steps,
             self.pattern,
             self.rng,
             force_positive=self.force_positive
         )
 
-    def expression(
+    def calculate_expression(
         self,
-        n_steps: int,
         regulatory_matrix: np.ndarray,
         decay_vector: np.ndarray,
         transcription_vector: np.ndarray,
         initial_value_vector: np.ndarray,
         tf_indices: np.ndarray,
         **kwargs
-    ) -> np.ndarray:
+    ) -> None:
 
-        if self._expression is not None:
-            return self._expression
+        if self.expression is not None:
+            return
 
-        self._expression = values_from_dynamic_network(
-            n_steps,
+        logger.debug(
+            f"Generating pattern gene expression for {self.name}"
+        )
+
+        self.expression = values_from_dynamic_network(
+            self.n_time_steps,
             self.activity,
             regulatory_matrix,
             decay_vector,
@@ -141,7 +168,27 @@ class Trajectory:
             initial_value_vector,
             tf_indices,
             include_non_activity_tfs=self.primary_trajectory,
+            offset_expression_activity=self.time_offset_expression_activity,
             **kwargs
         )
 
-        return self._expression
+        self._times = np.arange(self.n_time_steps)
+        self._times -= self.time_offset_expression_activity
+
+    def random_expression_time(
+        self,
+        rng: np.random.Generator = None
+    ) -> Tuple[np.ndarray, int]:
+
+        if rng is None:
+            rng = self.rng
+
+        _idx = rng.choice(
+            np.arange(
+                self.time_offset_expression_activity,
+                self.n_time_steps
+            ),
+            1
+        )[0]
+
+        return self.expression[_idx, :], self._times[_idx]
