@@ -3,8 +3,8 @@ from typing import (
 )
 
 from .generators.generate_dynamics import dynamic_value_generator
-from .values_from_network import values_from_network_latent
-from .values_from_dynamics import values_from_dynamic_network
+from .calculators import values_from_network_latent
+from .calculators import values_from_dynamic_network
 from .utils import logger
 
 import numpy as np

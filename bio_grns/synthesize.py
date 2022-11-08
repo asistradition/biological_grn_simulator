@@ -2,6 +2,7 @@ import numpy as np
 import anndata as ad
 import pandas as pd
 import tqdm
+import scipy.sparse as spsparse
 
 from .trajectories import Trajectory
 from .generators import (
@@ -11,6 +12,8 @@ from .generators import (
     generate_tf_indices,
     count_generator
 )
+from .calculators import network_holdouts
+
 from .utils import logger
 
 
@@ -22,10 +25,14 @@ class GRNSimulator:
     n_genes = None
     n_tfs = None
     n_samples = None
+
     n_time_steps = None
     counts_per_sample = None
 
+    activation_function = 'relu_onemax'
+
     _latent_networks = None
+    _tf_indices = None
     _transcriptional_output = None
     _decay_constants = None
 
@@ -41,9 +48,9 @@ class GRNSimulator:
         self,
         n_genes: int,
         n_tfs: int,
-        n_samples: int,
-        counts_per_sample: int,
         random_seed: int,
+        n_samples: int = 1000,
+        counts_per_sample: int = 5000,
         debug: bool = False
     ) -> None:
 
@@ -71,12 +78,7 @@ class GRNSimulator:
 
     def simulate(self) -> None:
 
-        self._tf_indices = generate_tf_indices(
-            self.n_genes,
-            self.n_tfs,
-            self._rng
-        )
-
+        self._generate_tf_indices()
         self._generate_latent_networks()
         self._generate_biophysical_params()
         self._generate_regulatory_network()
@@ -102,6 +104,14 @@ class GRNSimulator:
         if halflife_limits is not None:
             self._halflife_limits = halflife_limits
 
+    def _generate_tf_indices(self):
+
+        self._tf_indices = generate_tf_indices(
+            self.n_genes,
+            self.n_tfs,
+            self._rng
+        )
+
     def _generate_latent_networks(self):
 
         logger.info(
@@ -122,6 +132,7 @@ class GRNSimulator:
                 traj.target_ratios,
                 traj.latent_network_sparsity / traj.n_patterns,
                 self._rng,
+                positive_ratio=1.0,
                 row_one_entry=False
             )
 
@@ -209,16 +220,25 @@ class GRNSimulator:
                 self._transcriptional_output,
                 initial_vector,
                 self._tf_indices,
+                activation_function=self.activation_function
             )
 
     def generate_count_data(
         self,
+        n_samples: int = None,
         n_counts_per_sample: int = None,
-        random_seed: int = None
+        random_seed: int = None,
+        sparse: bool = False,
+        no_metadata: bool = False
     ):
 
+        # Use defaults from workflow
+        # If not provided to this function
         if n_counts_per_sample is None:
             n_counts_per_sample = self.counts_per_sample
+
+        if n_samples is None:
+            n_samples = self.n_samples
 
         if random_seed is None:
             rng = self._rng
@@ -262,28 +282,64 @@ class GRNSimulator:
 
         ### PACK UP THE UNDERLYING SIMULATED DATA INTO AN ANNDATA OBJECT ###
 
-        data.obs[[x.name for x in self._trajectories]] = _select_times
+        if sparse:
+            data.X = spsparse.csr_matrix(data.X)
 
-        data.var['decay_constant'] = self._decay_constants
-        data.var['transcriptional_output'] = self._transcriptional_output
+        if not no_metadata:
+            data.obs[[x.name for x in self._trajectories]] = _select_times
 
-        data.uns['network'] = pd.DataFrame(
-            self._reg_network,
-            index=data.var_names,
-            columns=data.var_names.values[self._tf_indices]
-        )
+            data.var['decay_constant'] = self._decay_constants
+            data.var['transcriptional_output'] = self._transcriptional_output
 
-        for traj in self._trajectories:
-
-            _pattern_names = [
-                f"{n[0]}_{i}"
-                for i, n in enumerate(traj.pattern)
-            ]
-
-            data.uns[f"{traj.name}"] = pd.DataFrame(
-                traj._latent_network,
-                index=data.var_names.values[self._tf_indices],
-                columns=_pattern_names
+            data.uns['network'] = pd.DataFrame(
+                self._reg_network,
+                index=data.var_names,
+                columns=data.var_names.values[self._tf_indices]
             )
 
+            for traj in self._trajectories:
+
+                _pattern_names = [
+                    f"{n[0]}_{i}"
+                    for i, n in enumerate(traj.pattern)
+                ]
+
+                data.uns[f"{traj.name}_network"] = pd.DataFrame(
+                    traj._latent_network,
+                    index=data.var_names.values[self._tf_indices],
+                    columns=_pattern_names
+                )
+
+                data.uns[f"{traj.name}_dynamic_activity"] = pd.DataFrame(
+                    traj._dynamic_values,
+                    columns=_pattern_names
+                )
+
         return data
+
+    def save_network(
+        self,
+        output_file,
+        edges_to_include=1.0,
+        sep="\t",
+        **kwargs
+    ) -> None:
+
+        network = pd.DataFrame(
+            self._reg_network
+        )
+        network.index = network.index.astype('str')
+        network.columns = network.index.values[self._tf_indices]
+
+        if edges_to_include != 1.0:
+            network = network_holdouts(
+                network,
+                edges_to_include,
+                self._rng
+            )
+
+        network.to_csv(
+            output_file,
+            sep=sep,
+            **kwargs
+        )

@@ -3,12 +3,25 @@ from scipy.special import (
     softmax,
     expit
 )
+from sklearn.preprocessing import MinMaxScaler
+
+from ..utils import logger
 
 def relu(x):
-    return np.maximum(0, x)
+    return np.maximum(
+        0,
+        x
+    )
+
+def relu_onemax(x):
+    return np.minimum(
+        1,
+        relu(x)
+    )
 
 _activation_funcs = {
     'relu': relu,
+    'relu_onemax': relu_onemax,
     'softmax': softmax,
     'sigmoid': expit,
     'linear': lambda x: x
@@ -30,6 +43,8 @@ def values_from_dynamic_network(
 
     n = initial_value_vector.shape[0]
 
+    # Regulators which do not have any activity in the
+    # activity matrix
     _no_activity = np.sum(activity_matrix != 0, axis=0) == 0
 
     out_values = np.zeros(
@@ -38,6 +53,11 @@ def values_from_dynamic_network(
     )
 
     out_values[0, :] = initial_value_vector
+
+    logger.debug(
+        f"Generating dynamic expression ({m} x {n}) "
+        f"with activation function {activation_function}"
+    )
 
     for m_row in range(1, m):
 
@@ -51,10 +71,15 @@ def values_from_dynamic_network(
 
             _row_activity = activity_matrix[m_row, :].copy()
 
-            _row_activity[_no_activity] = out_values[
-                _activity_offset_row,
-                tf_indices
-            ][_no_activity]
+            # Standardize regulator expression to the same range as activity
+            _offset_activity = MinMaxScaler(
+                feature_range=(0, _row_activity.max())
+            ).fit_transform(
+                out_values[_activity_offset_row, tf_indices].reshape(-1, 1)
+            ).ravel()
+
+            # Assign standardized expression as activity
+            _row_activity[_no_activity] = _offset_activity[_no_activity]
 
         else:
             _row_activity = activity_matrix[m_row, :]
