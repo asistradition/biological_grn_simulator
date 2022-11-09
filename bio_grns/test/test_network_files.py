@@ -122,7 +122,8 @@ class TestSimNetwork(unittest.TestCase):
 
             npt.assert_array_almost_equal(
                 pd.read_csv(fn, sep="\t", index_col=0).values,
-                self.sim._reg_network
+                self.sim._reg_network,
+                decimal=5
             )
 
     def test_make_holdout_files(self):

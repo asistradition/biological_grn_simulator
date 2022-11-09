@@ -12,7 +12,7 @@ long_description = "\n\n".join([open(os.path.join(base_dir, "README.md"), "r").r
 requires = [
     "numpy",
     "pandas",
-    "sklearn",
+    "scikit-learn",
     "anndata",
     "tqdm"
 ]

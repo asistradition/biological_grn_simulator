@@ -341,5 +341,6 @@ class GRNSimulator:
         network.to_csv(
             output_file,
             sep=sep,
+            float_format='%.5f',
             **kwargs
         )
