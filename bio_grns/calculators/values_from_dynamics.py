@@ -38,8 +38,36 @@ def values_from_dynamic_network(
     include_non_activity_tfs: bool = True,
     delta_time: float = 1.0,
     offset_expression_activity: int = 15,
-    activation_function: str = "sigmoid"
+    activation_function: str = "relu_onemax"
 ) -> np.ndarray:
+    """
+    Generate expression values based on ODE
+
+    :param m: _description_
+    :type m: int
+    :param activity_matrix: _description_
+    :type activity_matrix: np.ndarray
+    :param regulatory_matrix: _description_
+    :type regulatory_matrix: np.ndarray
+    :param decay_vector: _description_
+    :type decay_vector: np.ndarray
+    :param transcription_vector: _description_
+    :type transcription_vector: np.ndarray
+    :param initial_value_vector: _description_
+    :type initial_value_vector: np.ndarray
+    :param tf_indices: _description_
+    :type tf_indices: np.ndarray
+    :param include_non_activity_tfs: _description_, defaults to True
+    :type include_non_activity_tfs: bool, optional
+    :param delta_time: _description_, defaults to 1.0
+    :type delta_time: float, optional
+    :param offset_expression_activity: _description_, defaults to 15
+    :type offset_expression_activity: int, optional
+    :param activation_function: _description_, defaults to "sigmoid"
+    :type activation_function: str, optional
+    :return: _description_
+    :rtype: np.ndarray
+    """
 
     n = initial_value_vector.shape[0]
 

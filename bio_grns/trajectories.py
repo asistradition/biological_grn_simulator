@@ -9,6 +9,7 @@ from .utils import logger
 
 import numpy as np
 
+
 class Trajectory:
 
     pattern = None
@@ -95,7 +96,8 @@ class Trajectory:
         :type pattern_name: str
         :param *args: Pattern arguments
         :type *args: floats
-        :param target_edge_ratio: Ratio of TFs that are influenced by this pattern
+        :param target_edge_ratio: Ratio of TFs that are influenced
+            by this pattern
         :type target_edge_ratio: float
         """
 

@@ -36,7 +36,7 @@ class GRNSimulator:
     _transcriptional_output = None
     _decay_constants = None
 
-    ### Simulation Parameters ###
+    # Simulation Parameters #
     _halflife_limits = (10, 100)
     _reg_network_sparsity = 0.03
     _reg_network_positive = 0.8
@@ -280,7 +280,7 @@ class GRNSimulator:
 
             _select_times.append([x[1] for x in select_expression])
 
-        ### PACK UP THE UNDERLYING SIMULATED DATA INTO AN ANNDATA OBJECT ###
+        # PACK UP THE UNDERLYING SIMULATED DATA INTO AN ANNDATA OBJECT #
 
         if sparse:
             data.X = spsparse.csr_matrix(data.X)
