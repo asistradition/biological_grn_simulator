@@ -1,3 +1,5 @@
+from typing import Callable
+
 import numpy as np
 from scipy.special import (
     softmax,
@@ -7,17 +9,20 @@ from sklearn.preprocessing import MinMaxScaler
 
 from ..utils import logger
 
+
 def relu(x):
     return np.maximum(
         0,
         x
     )
 
+
 def relu_onemax(x):
     return np.minimum(
         1,
         relu(x)
     )
+
 
 _activation_funcs = {
     'relu': relu,
@@ -26,6 +31,7 @@ _activation_funcs = {
     'sigmoid': expit,
     'linear': lambda x: x
 }
+
 
 def values_from_dynamic_network(
     m: int,
@@ -38,34 +44,39 @@ def values_from_dynamic_network(
     include_non_activity_tfs: bool = True,
     delta_time: float = 1.0,
     offset_expression_activity: int = 15,
-    activation_function: str = "relu_onemax"
+    activation_function: str = "relu_onemax",
+    balance_transcription_decay: bool = True,
+    return_layers: bool = False
 ) -> np.ndarray:
     """
     Generate expression values based on ODE
 
-    :param m: _description_
+    :param m: Number of time output steps
     :type m: int
-    :param activity_matrix: _description_
+    :param activity_matrix: TF activity matrix (m x k)
     :type activity_matrix: np.ndarray
-    :param regulatory_matrix: _description_
+    :param regulatory_matrix: TF to gene regulation matrix [g x k]
     :type regulatory_matrix: np.ndarray
-    :param decay_vector: _description_
+    :param decay_vector: Vector of decay constants [g]
     :type decay_vector: np.ndarray
-    :param transcription_vector: _description_
+    :param transcription_vector: Vector of maximum transcriptional rates [g]
     :type transcription_vector: np.ndarray
-    :param initial_value_vector: _description_
+    :param initial_value_vector: Initial expression vector at t0
     :type initial_value_vector: np.ndarray
-    :param tf_indices: _description_
+    :param tf_indices: TF indices for TFs where activity == expression
     :type tf_indices: np.ndarray
-    :param include_non_activity_tfs: _description_, defaults to True
+    :param include_non_activity_tfs: Include TFs where activity == expression,
+        defaults to True
     :type include_non_activity_tfs: bool, optional
-    :param delta_time: _description_, defaults to 1.0
+    :param delta_time: Magnitude of dt, defaults to 1.0
     :type delta_time: float, optional
-    :param offset_expression_activity: _description_, defaults to 15
+    :param offset_expression_activity: Temporal offset for TF activity derived
+        from expression, defaults to 15
     :type offset_expression_activity: int, optional
-    :param activation_function: _description_, defaults to "sigmoid"
+    :param activation_function: TF activity activation function,
+        defaults to "sigmoid"
     :type activation_function: str, optional
-    :return: _description_
+    :return: Expression array [m x g]
     :rtype: np.ndarray
     """
 
@@ -75,12 +86,27 @@ def values_from_dynamic_network(
     # activity matrix
     _no_activity = np.sum(activity_matrix != 0, axis=0) == 0
 
-    out_values = np.zeros(
+    out_expression = np.zeros(
         (m, n),
         float
     )
 
-    out_values[0, :] = initial_value_vector
+    out_transcription = np.zeros(
+        (m, n),
+        float
+    )
+
+    out_velocity = np.zeros(
+        (m, n),
+        float
+    )
+
+    out_decay = np.zeros(
+        (m, n),
+        float
+    )
+
+    out_expression[0, :] = initial_value_vector
 
     logger.debug(
         f"Generating dynamic expression ({m} x {n}) "
@@ -103,7 +129,7 @@ def values_from_dynamic_network(
             _offset_activity = MinMaxScaler(
                 feature_range=(0, _row_activity.max())
             ).fit_transform(
-                out_values[_activity_offset_row, tf_indices].reshape(-1, 1)
+                out_expression[_activity_offset_row, tf_indices].reshape(-1, 1)
             ).ravel()
 
             # Assign standardized expression as activity
@@ -112,23 +138,55 @@ def values_from_dynamic_network(
         else:
             _row_activity = activity_matrix[m_row, :]
 
-        out_values[m_row, :] = _time_step(
-            out_values[m_row - 1, :],
-            _activation_funcs[activation_function](
-                np.dot(
-                    regulatory_matrix,
-                    _row_activity
-                )
-            ) * transcription_vector,
+        out_transcription[m_row, :] = _transcription_step(
+            _row_activity,
+            regulatory_matrix,
+            transcription_vector,
+            _activation_funcs[activation_function]
+        )
+
+        out_decay[m_row, :] = _decay_step(
+            out_expression[m_row - 1, :],
             decay_vector
-        ) * delta_time + out_values[m_row - 1, :]
+        )
 
-    return out_values
+        if balance_transcription_decay:
+            _td_ratio = out_transcription[m_row, :].sum()
+            _td_ratio /= out_decay[m_row, :].sum()
 
-def _time_step(
+            out_transcription[m_row, :] /= np.abs(_td_ratio)
+
+        out_velocity[m_row, :] = out_transcription[m_row, :]
+        out_velocity[m_row, :] += out_decay[m_row, :]
+        out_velocity[m_row, :] *= delta_time
+
+        out_expression[m_row, :] = out_velocity[m_row, :]
+        out_expression[m_row, :] += out_expression[m_row - 1, :]
+
+    if return_layers:
+        return out_expression, out_velocity, out_transcription, out_decay
+    else:
+        return out_expression
+
+
+def _transcription_step(
+    activity: np.ndarray,
+    regulatory_matrix: np.ndarray,
+    transcription_vector: np.ndarray,
+    activation_function: Callable[[np.ndarray], np.ndarray]
+) -> np.ndarray:
+
+    return activation_function(
+        np.dot(
+            regulatory_matrix,
+            activity
+        )
+    ) * transcription_vector
+
+
+def _decay_step(
     x: np.ndarray,
-    alpha: np.ndarray,
     lamb: np.ndarray
 ) -> np.ndarray:
 
-    return -1 * lamb * x + alpha
+    return -1 * lamb * x

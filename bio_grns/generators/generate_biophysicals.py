@@ -4,6 +4,7 @@ from typing import (
 
 import numpy as np
 
+
 def generate_decays(
     n: int,
     random: np.random.Generator,
@@ -63,33 +64,35 @@ def generate_decays(
         n
     )
 
+
 def generate_transcription_rates(
     n: int,
     random: np.random.Generator,
-    scale: float = 1.,
-    shape: float = 1.
+    mean: float = 0.5,
+    std: float = 0.5
 ) -> np.ndarray:
     """
     Generate a set of maximum transcription outputs
-    alpha ~ Gamma(1, 1)
+    alpha ~ Lognormal(0.5, 0.5)
 
     :param n: Number of transcriptional outputs to generate
     :type n: int
     :param random: Random number generator
     :type random: np.random.Generator
-    :param scale: Gamma scale parameter, defaults to 1
-    :type scale: float, optional
-    :param shape: Gamma shape parameter, defaults to 1
-    :type shape: float, optional
+    :param mean: Lognormal mean parameter, defaults to 1
+    :type mean: float, optional
+    :param std: Lognormal std parameter, defaults to 1
+    :type std: float, optional
     :return: Array of transcriptional output values
     :rtype: np.ndarray
     """
 
-    return random.gamma(
-        shape,
-        scale,
+    return random.lognormal(
+        mean,
+        std,
         n
     )
+
 
 def generate_tf_indices(
     n_genes: int,

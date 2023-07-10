@@ -21,10 +21,38 @@ class Trajectory:
     rng = None
 
     _activity = None
-    expression = None
 
     _dynamic_values = None
     _latent_network = None
+    _expression_values = None
+
+    @property
+    def expression(self):
+        if self._expression_values is None:
+            return None
+
+        return self._expression_values[..., 0]
+
+    @property
+    def velocity(self):
+        if self._expression_values is None:
+            return None
+
+        return self._expression_values[..., 1]
+
+    @property
+    def transcription(self):
+        if self._expression_values is None:
+            return None
+
+        return self._expression_values[..., 2]
+
+    @property
+    def decay(self):
+        if self._expression_values is None:
+            return None
+
+        return self._expression_values[..., 3]
 
     @property
     def activity(self):
@@ -161,7 +189,7 @@ class Trajectory:
             f"Generating pattern gene expression for {self.name}"
         )
 
-        self.expression = values_from_dynamic_network(
+        dynamics = values_from_dynamic_network(
             self.n_time_steps,
             self.activity,
             regulatory_matrix,
@@ -171,8 +199,11 @@ class Trajectory:
             tf_indices,
             include_non_activity_tfs=self.primary_trajectory,
             offset_expression_activity=self.time_offset_expression_activity,
+            return_layers=True,
             **kwargs
         )
+
+        self._expression_values = np.stack(dynamics, axis=-1)
 
         self._times = np.arange(self.n_time_steps)
         self._times -= self.time_offset_expression_activity
@@ -193,4 +224,4 @@ class Trajectory:
             1
         )[0]
 
-        return self.expression[_idx, :], self._times[_idx]
+        return self._expression_values[_idx, ...], self._times[_idx]

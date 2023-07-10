@@ -5,8 +5,15 @@ from setuptools import setup, find_packages
 version = "0.1.0"
 
 # Description from README.md
-base_dir = os.path.dirname(os.path.abspath(__file__))
-long_description = "\n\n".join([open(os.path.join(base_dir, "README.md"), "r").read()])
+long_description = "\n\n".join([
+    open(
+        os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            "README.md"
+        ),
+        "r"
+    ).read()
+])
 
 # Required packages
 requires = [

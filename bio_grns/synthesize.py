@@ -133,7 +133,8 @@ class GRNSimulator:
                 traj.latent_network_sparsity / traj.n_patterns,
                 self._rng,
                 positive_ratio=1.0,
-                row_one_entry=False
+                row_one_entry=False,
+                level_network=True
             )
 
             traj.set_network(_traj_network)
@@ -189,13 +190,8 @@ class GRNSimulator:
 
         for traj in self._trajectories:
 
-            initial_vector = np.maximum(
-                0,
-                self._rng.normal(
-                    100,
-                    100,
-                    self.n_genes
-                )
+            _initial_probs = self._rng.uniform(
+                size=self.n_genes
             )
 
             # Zero out the initial vector for targets
@@ -212,7 +208,18 @@ class GRNSimulator:
                     axis=1
                 )
 
-                initial_vector[~_relevant_genes] = 0.
+                _initial_probs[~_relevant_genes] = 0.
+
+            _initial_probs /= _initial_probs.sum()
+
+            initial_vector = np.bincount(
+                self._rng.choice(
+                    np.arange(self.n_genes),
+                    size=self.counts_per_sample,
+                    p=_initial_probs
+                ),
+                minlength=self.n_genes
+            )
 
             traj.calculate_expression(
                 self._reg_network,
@@ -257,6 +264,10 @@ class GRNSimulator:
             dtype=int
         )
 
+        data.layers['velocity'] = np.zeros(data.X.shape)
+        data.layers['transcription'] = np.zeros(data.X.shape)
+        data.layers['decay'] = np.zeros(data.X.shape)
+
         _select_times = []
 
         for i in tqdm.trange(self.n_samples):
@@ -264,21 +275,29 @@ class GRNSimulator:
             # Randomly select a point on each trajectory
             # Build a joint expression vector
             # And convert it to a probability vector to select counts
-            select_expression = [
+            _traj_data, _time = _combine_trajectories([
                 traj.random_expression_time(rng=rng)
                 for traj in self._trajectories
-            ]
+            ])
 
-            joint_expression = sum([x[0] for x in select_expression])
-            joint_expression /= np.sum(joint_expression)
+            _count_depth = np.sum(_traj_data[..., 0])
+
+            _traj_data[..., 0] /= _count_depth
 
             data.X[i, :] = count_generator(
-                joint_expression,
+                _traj_data[..., 0],
                 n_counts_per_sample,
                 rng
             )
 
-            _select_times.append([x[1] for x in select_expression])
+            # Modify biophyscal layers to match count depth
+            _mod = n_counts_per_sample / _count_depth
+
+            data.layers['velocity'][i, :] = _traj_data[..., 1] * _mod
+            data.layers['transcription'][i, :] = _traj_data[..., 2] * _mod
+            data.layers['decay'][i, :] = _traj_data[..., 3] * _mod
+
+            _select_times.append(_time)
 
         # PACK UP THE UNDERLYING SIMULATED DATA INTO AN ANNDATA OBJECT #
 
@@ -344,3 +363,13 @@ class GRNSimulator:
             float_format='%.5f',
             **kwargs
         )
+
+
+def _combine_trajectories(
+    trajectory_data
+):
+
+    times = [x[1] for x in trajectory_data]
+    data = sum([x[0] for x in trajectory_data])
+
+    return data, times

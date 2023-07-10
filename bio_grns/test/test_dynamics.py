@@ -10,6 +10,7 @@ from bio_grns.generators.generate_dynamics import (
 import numpy as np
 import numpy.testing as npt
 
+
 class TestDynamics(unittest.TestCase):
 
     def setUp(self) -> None:
@@ -75,7 +76,7 @@ class TestDynamics(unittest.TestCase):
     def test_random_walk(self):
         dyn_vals = _random_walk(
             500,
-            0.5,
+            1,
             0.001,
             0.1,
             self.rng
@@ -112,8 +113,6 @@ class TestDynamics(unittest.TestCase):
             -0.005,
             self.rng
         )
-
-        print(dyn_vals)
 
         self.assertTrue(
             np.all(dyn_vals > 0)

@@ -3,6 +3,7 @@ import numpy as np
 
 from ..utils import logger
 
+
 def network_generator(
     n: int,
     m: int,
@@ -12,7 +13,8 @@ def network_generator(
     minimum_abs_value: float = 0.25,
     maximum_abs_value: float = 1.0,
     positive_ratio: float = 0.75,
-    row_one_entry: bool = True
+    row_one_entry: bool = True,
+    level_network: bool = False
 ) -> np.ndarray:
     """
     Simulate a regulatory network between n regulatory
@@ -38,6 +40,9 @@ def network_generator(
     :type positive_ratio: float, optional
     :param row_one_entry: Each row may have at most one nonzero value
     :type row_one_entry: bool
+    :param level_network: If row has more than one non-zero value,
+        relevel so that sum of all values is within the value range
+    :type level_network: bool
     """
 
     # Verify arguments are valid
@@ -134,6 +139,13 @@ def network_generator(
         )
 
         tll_network[m_connections, n_col] = connections[m_connections]
+
+    if level_network:
+        _row_sum = np.sum(tll_network, axis=1)
+        _row_sum[_row_sum == 0] = 1.
+        _row_mod = np.max(tll_network, axis=1) / _row_sum
+
+        tll_network = np.multiply(tll_network, _row_mod[:, None])
 
     logger.debug(
         f"Generated {tll_network.shape} network "
